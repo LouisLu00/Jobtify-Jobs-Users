@@ -13,17 +13,19 @@ public class User {
     private Long id;
 
     private String username;
-    private String password;
+    private String password; // Nullable for Google users
     private String email;
+    private String googleId; // Google unique user ID
 
     // Default constructor
     public User() {}
 
-    // Constructor with parameters
-    public User(String username, String password, String email) {
+    // Constructor for Google OAuth
+    public User(String username, String email, String googleId) {
         this.username = username;
-        this.password = password;
         this.email = email;
+        this.googleId = googleId;
+        this.password = null; // Google users don't have passwords
     }
 
     // Getters and setters
@@ -59,4 +61,13 @@ public class User {
     public void setEmail(String email) {
         this.email = email;
     }
+
+    public String getGoogleId() {
+        return googleId;
+    }
+
+    public void setGoogleId(String googleId) {
+        this.googleId = googleId;
+    }
 }
+

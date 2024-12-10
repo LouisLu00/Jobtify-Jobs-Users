@@ -7,7 +7,10 @@ import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+
 
 import java.util.Optional;
 
@@ -57,6 +60,18 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(false);
         }
         return ResponseEntity.ok(true);
+    }
+
+    @GetMapping("/google-login")
+    public ResponseEntity<?> googleLogin(@AuthenticationPrincipal OAuth2User principal) {
+        String googleId = principal.getAttribute("sub"); // Google unique user ID
+        String email = principal.getAttribute("email");
+        String name = principal.getAttribute("name");
+
+        // Use UserService to handle Google login or registration
+        User user = userService.handleGoogleLogin(googleId, email, name);
+
+        return ResponseEntity.ok(generateUserHateoasResponse(user));
     }
 
     private EntityModel<User> generateUserHateoasResponse(User user) {
