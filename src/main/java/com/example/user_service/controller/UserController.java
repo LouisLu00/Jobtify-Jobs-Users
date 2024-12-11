@@ -179,6 +179,8 @@ public class UserController {
     }
 
 
+
+
     private EntityModel<User> generateUserHateoasResponse(User user) {
         EntityModel<User> resource = EntityModel.of(user);
         resource.add(WebMvcLinkBuilder.linkTo(
