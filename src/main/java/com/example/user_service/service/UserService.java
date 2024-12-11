@@ -77,4 +77,6 @@ public class UserService {
         logger.info("Saving user: email={}, Correlation-ID={}", user.getEmail(), correlationId);
         return userRepository.save(user);
     }
+
+
 }
