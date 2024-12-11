@@ -8,7 +8,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
@@ -25,28 +24,13 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-//    @Bean
-//    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-//        http
-//                .csrf(csrf -> csrf.disable())  // Disables CSRF globally
-//
-//                // Permit all requests temporarily for debugging
-//                .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll());
-//
-//        return http.build();
-//    }
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-//        String clientId = EnvConfig.get("GOOGLE_CLIENT_ID");
-//        String clientSecret = EnvConfig.get("GOOGLE_CLIENT_SECRET");
-//        String redirectUri = "https://ec2-13-58-61-231.us-east-2.compute.amazonaws.com/login/oauth2/code/google";
-//
-//        System.out.println("Client ID: " + clientId);
-//        System.out.println("Client Secret: " + clientSecret);
-
         http
                 .csrf(csrf -> csrf.disable()) // Disable CSRF protection globally
                 .authorizeHttpRequests(auth -> auth
+                        // Permit access to the Swagger endpoints
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
                         // Permit access to the registration and login endpoints
                         .requestMatchers("/api/users/register", "/api/users/login", "/api/users/google-login").permitAll()
                         // Permit other endpoints as necessary, e.g., for health checks
@@ -59,5 +43,4 @@ public class SecurityConfig {
 
         return http.build();
     }
-
 }
