@@ -1,10 +1,9 @@
 package com.example.user_service.model;
-
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+
 
 @Entity
 public class User {
@@ -14,10 +13,7 @@ public class User {
     private Long id;
 
     private String username;
-
-    @JsonProperty(access = JsonProperty.Access.READ_WRITE) // Include password in both requests and responses
     private String password; // Nullable for Google users
-
     private String email;
     private String googleId; // Google unique user ID
 
