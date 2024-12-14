@@ -8,7 +8,7 @@ public class EnvConfig {
     static {
         dotenv = Dotenv.configure()
                 .directory("/") // Look in the root of the classpath
-                .filename(".env") // Specify the file name
+                .filename("application-env.properties") // Specify the file name
                 .load();
     }
 
