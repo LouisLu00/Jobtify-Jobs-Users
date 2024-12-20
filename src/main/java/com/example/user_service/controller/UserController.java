@@ -35,20 +35,62 @@ public class UserController {
     @Autowired
     private UserService userService;
 
-    @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody User user) {
-        String correlationId = MDC.get("X-Correlation-ID");
-        logger.info("Registering user: {}, Correlation-ID={}", user.getUsername(), correlationId);
+//    @PostMapping("/register")
+//    public ResponseEntity<?> registerUser(@RequestBody User user) {
+//        String correlationId = MDC.get("X-Correlation-ID");
+//        logger.info("Registering user: {}, Correlation-ID={}", user.getUsername(), correlationId);
+//
+//        try {
+//            User registeredUser = userService.registerUser(user.getUsername(), user.getPassword(), user.getEmail());
+//            logger.info("User successfully registered: {}, Correlation-ID={}", user.getUsername(), correlationId);
+//            return ResponseEntity.status(HttpStatus.CREATED).body(generateUserHateoasResponse(registeredUser));
+//        } catch (Exception e) {
+//            logger.error("Registration failed for user: {}. Error: {}, Correlation-ID={}", user.getUsername(), e.getMessage(), correlationId);
+//            return ResponseEntity.badRequest().body("Registration failed: " + e.getMessage());
+//        }
+//    }
 
-        try {
-            User registeredUser = userService.registerUser(user.getUsername(), user.getPassword(), user.getEmail());
-            logger.info("User successfully registered: {}, Correlation-ID={}", user.getUsername(), correlationId);
-            return ResponseEntity.status(HttpStatus.CREATED).body(generateUserHateoasResponse(registeredUser));
-        } catch (Exception e) {
-            logger.error("Registration failed for user: {}. Error: {}, Correlation-ID={}", user.getUsername(), e.getMessage(), correlationId);
-            return ResponseEntity.badRequest().body("Registration failed: " + e.getMessage());
+
+
+//    @PostMapping("/login")
+//    public ResponseEntity<?> loginUser(@RequestBody User user) {
+//        String correlationId = MDC.get("X-Correlation-ID");
+//        logger.info("User login attempt: {}, Correlation-ID={}", user.getUsername(), correlationId);
+//
+//        try {
+//            User authenticatedUser = userService.loginUser(user.getUsername(), user.getPassword());
+//            if (authenticatedUser != null) {
+//                logger.info("User successfully logged in: {}, Correlation-ID={}", user.getUsername(), correlationId);
+//                return ResponseEntity.ok(generateUserHateoasResponse(authenticatedUser));
+//            } else {
+//                logger.warn("Invalid login credentials for user: {}, Correlation-ID={}", user.getUsername(), correlationId);
+//                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
+//            }
+//        } catch (Exception e) {
+//            logger.error("Error during login for user: {}. Error: {}, Correlation-ID={}", user.getUsername(), e.getMessage(), correlationId);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An error occurred");
+//        }
+//    }
+// Regular user login
+@PostMapping("/register")
+public ResponseEntity<?> registerUser(@RequestBody User user) {
+    String correlationId = MDC.get("X-Correlation-ID");
+    logger.info("Registering user: {}, Correlation-ID={}", user.getUsername(), correlationId);
+
+    try {
+        if (user.getPassword() == null || user.getPassword().isEmpty()) {
+            logger.warn("Password is missing for registration: {}", user.getUsername());
+            return ResponseEntity.badRequest().body("Password is required for regular registration");
         }
+
+        User registeredUser = userService.registerUser(user.getUsername(), user.getPassword(), user.getEmail());
+        logger.info("User successfully registered: {}, Correlation-ID={}", user.getUsername(), correlationId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(registeredUser);
+    } catch (Exception e) {
+        logger.error("Registration failed for user: {}. Error: {}, Correlation-ID={}", user.getUsername(), e.getMessage(), correlationId, e);
+        return ResponseEntity.badRequest().body("Registration failed: " + e.getMessage());
     }
+}
 
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody User user) {
@@ -59,16 +101,60 @@ public class UserController {
             User authenticatedUser = userService.loginUser(user.getUsername(), user.getPassword());
             if (authenticatedUser != null) {
                 logger.info("User successfully logged in: {}, Correlation-ID={}", user.getUsername(), correlationId);
-                return ResponseEntity.ok(generateUserHateoasResponse(authenticatedUser));
+                return ResponseEntity.ok(authenticatedUser);
             } else {
                 logger.warn("Invalid login credentials for user: {}, Correlation-ID={}", user.getUsername(), correlationId);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
             }
         } catch (Exception e) {
-            logger.error("Error during login for user: {}. Error: {}, Correlation-ID={}", user.getUsername(), e.getMessage(), correlationId);
+            logger.error("Error during login for user: {}. Error: {}, Correlation-ID={}", user.getUsername(), e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An error occurred");
         }
     }
+
+    @PostMapping("/google-login")
+    public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> body) {
+        String idToken = body.get("idToken");
+
+        if (idToken == null || idToken.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("ID token is required");
+        }
+
+        try {
+            String googleClientId = System.getenv("GOOGLE_CLIENT_ID");
+            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new JacksonFactory())
+                    .setAudience(Collections.singletonList(googleClientId))
+                    .build();
+
+            GoogleIdToken googleIdToken = verifier.verify(idToken);
+            if (googleIdToken != null) {
+                GoogleIdToken.Payload payload = googleIdToken.getPayload();
+
+                if (!"accounts.google.com".equals(payload.getIssuer()) &&
+                        !"https://accounts.google.com".equals(payload.getIssuer())) {
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid issuer");
+                }
+
+                String email = payload.getEmail();
+                Boolean emailVerified = payload.getEmailVerified();
+                if (emailVerified == null || !emailVerified) {
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unverified email");
+                }
+
+                String name = (String) payload.get("name");
+                String googleId = payload.getSubject();
+
+                User user = userService.handleGoogleLogin(googleId, email, name);
+                return ResponseEntity.ok(user);
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid ID token");
+            }
+        } catch (GeneralSecurityException | IOException e) {
+            logger.error("Error verifying Google ID token: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Token verification failed");
+        }
+    }
+
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getUser(@PathVariable Long id) {
@@ -85,15 +171,15 @@ public class UserController {
         }
     }
 
-    @GetMapping("/{userId}/exists")
-    public ResponseEntity<Boolean> checkUserExists(@PathVariable Long userId) {
-        String correlationId = MDC.get("X-Correlation-ID");
-        logger.info("Checking if user exists for ID: {}, Correlation-ID={}", userId, correlationId);
-
-        boolean exists = userService.userExists(userId);
-        logger.info("User existence check: id={}, exists={}, Correlation-ID={}", userId, exists, correlationId);
-        return ResponseEntity.ok(exists);
-    }
+//    @GetMapping("/{userId}/exists")
+//    public ResponseEntity<Boolean> checkUserExists(@PathVariable Long userId) {
+//        String correlationId = MDC.get("X-Correlation-ID");
+//        logger.info("Checking if user exists for ID: {}, Correlation-ID={}", userId, correlationId);
+//
+//        boolean exists = userService.userExists(userId);
+//        logger.info("User existence check: id={}, exists={}, Correlation-ID={}", userId, exists, correlationId);
+//        return ResponseEntity.ok(exists);
+//    }
 
     private static final String CLIENT_ID = "980242448046-qrve5hbo75iqfpp0q33uhtbud4hutped.apps.googleusercontent.com";
 
@@ -124,61 +210,59 @@ public class UserController {
 //    }
     //private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
-    @PostMapping("/google-login")
-    public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> body) {
-        String idToken = body.get("idToken");
-
-        if (idToken == null || idToken.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("ID token is required");
-        }
-
-        try {
-            // Retrieve Google Client ID from environment
-            String googleClientId = EnvConfig.get("GOOGLE_CLIENT_ID");
-
-            // Debug output to verify environment variable
-            System.out.println("GOOGLE_CLIENT_ID: " + googleClientId);
-            logger.info("GOOGLE_CLIENT_ID retrieved: {}", googleClientId);
-            // Initialize verifier
-            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new JacksonFactory())
-                    .setAudience(Collections.singletonList(EnvConfig.get("GOOGLE_CLIENT_ID"))) // Ensure client ID matches
-                    .build();
-
-            // Verify the ID token
-            GoogleIdToken googleIdToken = verifier.verify(idToken);
-            if (googleIdToken != null) {
-                GoogleIdToken.Payload payload = googleIdToken.getPayload();
-
-                // Check required claims
-                if (!"accounts.google.com".equals(payload.getIssuer()) &&
-                        !"https://accounts.google.com".equals(payload.getIssuer())) {
-                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid issuer");
-                }
-
-                String email = payload.getEmail();
-                Boolean emailVerified = payload.getEmailVerified(); // Fixed the type error
-                if (emailVerified == null || !emailVerified) { // Proper null check
-                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unverified email");
-                }
-
-                String name = (String) payload.get("name");
-                String googleId = payload.getSubject();
-
-                // Handle Google login or registration
-                User user = userService.handleGoogleLogin(googleId, email, name);
-
-                // Return user details or session token
-                return ResponseEntity.ok(Map.of("userId", user.getId()));
-            } else {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid ID token");
-            }
-        } catch (GeneralSecurityException | IOException e) {
-            logger.error("Error verifying Google ID token: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Token verification failed");
-        }
-    }
-
-
+//    @PostMapping("/google-login")
+//    public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> body) {
+//        String idToken = body.get("idToken");
+//
+//        if (idToken == null || idToken.isEmpty()) {
+//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("ID token is required");
+//        }
+//
+//        try {
+//            // Retrieve Google Client ID from environment
+//            String googleClientId = EnvConfig.get("GOOGLE_CLIENT_ID");
+//
+//            // Debug output to verify environment variable
+//            System.out.println("GOOGLE_CLIENT_ID: " + googleClientId);
+//            logger.info("GOOGLE_CLIENT_ID retrieved: {}", googleClientId);
+//            // Initialize verifier
+//            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new JacksonFactory())
+//                    .setAudience(Collections.singletonList(EnvConfig.get("GOOGLE_CLIENT_ID"))) // Ensure client ID matches
+//                    .build();
+//
+//            // Verify the ID token
+//            GoogleIdToken googleIdToken = verifier.verify(idToken);
+//            if (googleIdToken != null) {
+//                GoogleIdToken.Payload payload = googleIdToken.getPayload();
+//
+//                // Check required claims
+//                if (!"accounts.google.com".equals(payload.getIssuer()) &&
+//                        !"https://accounts.google.com".equals(payload.getIssuer())) {
+//                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid issuer");
+//                }
+//
+//                String email = payload.getEmail();
+//                Boolean emailVerified = payload.getEmailVerified(); // Fixed the type error
+//                if (emailVerified == null || !emailVerified) { // Proper null check
+//                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unverified email");
+//                }
+//
+//                String name = (String) payload.get("name");
+//                String googleId = payload.getSubject();
+//
+//                // Handle Google login or registration
+//                User user = userService.handleGoogleLogin(googleId, email, name);
+//
+//                // Return user details or session token
+//                return ResponseEntity.ok(Map.of("userId", user.getId()));
+//            } else {
+//                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid ID token");
+//            }
+//        } catch (GeneralSecurityException | IOException e) {
+//            logger.error("Error verifying Google ID token: {}", e.getMessage());
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Token verification failed");
+//        }
+//    }
 
 
     private EntityModel<User> generateUserHateoasResponse(User user) {

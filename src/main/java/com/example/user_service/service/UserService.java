@@ -22,37 +22,84 @@ public class UserService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    public User registerUser(String username, String password, String email) {
-        String correlationId = MDC.get("X-Correlation-ID");
-        logger.info("Registering user: username={}, Correlation-ID={}", username, correlationId);
+//    public User registerUser(String username, String password, String email) {
+//        String correlationId = MDC.get("X-Correlation-ID");
+//        logger.info("Registering user: username={}, Correlation-ID={}", username, correlationId);
+//
+//        User user = new User(username, passwordEncoder.encode(password), email);
+//        return userRepository.save(user);
+//    }
+// Regular user registration
+// Regular user registration
+public User registerUser(String username, String password, String email) {
+    String correlationId = MDC.get("X-Correlation-ID");
+    logger.info("Registering user: username={}, Correlation-ID={}", username, correlationId);
 
-        User user = new User(username, passwordEncoder.encode(password), email);
-        return userRepository.save(user);
+    if (password == null || password.isEmpty()) {
+        logger.error("Password is null or empty for regular registration: username={}, Correlation-ID={}", username, correlationId);
+        throw new IllegalArgumentException("Password cannot be null or empty for regular registration");
     }
 
-    public User handleGoogleLogin(String googleId, String email, String name) {
-        String correlationId = MDC.get("X-Correlation-ID");
-        logger.info("Handling Google login for email: {}, Correlation-ID={}", email, correlationId);
+    String hashedPassword = passwordEncoder.encode(password);
+    logger.debug("Hashed password for user: {}", username);
 
-        Optional<User> existingUser = findByEmail(email);
-        if (existingUser.isPresent()) {
-            logger.info("Google user exists: email={}, Correlation-ID={}", email, correlationId);
-            return existingUser.get();
-        }
-
-        User newUser = new User(name, null, email);
-        newUser.setGoogleId(googleId);
-        return userRepository.save(newUser);
-    }
+    User user = new User(username, hashedPassword, email);
+    return userRepository.save(user);
+}
 
     public User loginUser(String username, String password) {
         String correlationId = MDC.get("X-Correlation-ID");
         logger.info("Attempting to login user: {}, Correlation-ID={}", username, correlationId);
 
         Optional<User> optionalUser = userRepository.findByUsername(username);
-        return optionalUser.filter(user -> passwordEncoder.matches(password, user.getPassword()))
-                .orElse(null);
+        if (optionalUser.isEmpty()) {
+            logger.warn("User not found: {}, Correlation-ID={}", username, correlationId);
+            return null;
+        }
+
+        User user = optionalUser.get();
+        logger.debug("User found: {}", username);
+
+        // Skip password validation for Google users
+        if (user.getPassword() == null) {
+            logger.info("Google user login successful: {}, Correlation-ID={}", username, correlationId);
+            return user;
+        }
+
+        // Validate password for regular users
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            logger.warn("Invalid password for user: {}, Correlation-ID={}", username, correlationId);
+            return null;
+        }
+
+        logger.info("Regular user login successful: {}, Correlation-ID={}", username, correlationId);
+        return user;
     }
+
+    public User handleGoogleLogin(String googleId, String email, String name) {
+        String correlationId = MDC.get("X-Correlation-ID");
+        logger.info("Handling Google login for email: {}, Correlation-ID={}", email, correlationId);
+
+        Optional<User> existingUser = userRepository.findByGoogleId(googleId);
+        if (existingUser.isPresent()) {
+            logger.info("Google user exists: email={}, Correlation-ID={}", email, correlationId);
+            return existingUser.get();
+        }
+
+        User newUser = new User(name, null, email); // Ensure password is null
+        newUser.setGoogleId(googleId);
+        logger.info("Creating a new Google user: Google ID={}, email={}, Correlation-ID={}", googleId, email, correlationId);
+        return userRepository.save(newUser);
+    }
+//    public User loginUser(String username, String password) {
+//        String correlationId = MDC.get("X-Correlation-ID");
+//        logger.info("Attempting to login user: {}, Correlation-ID={}", username, correlationId);
+//
+//        Optional<User> optionalUser = userRepository.findByUsername(username);
+//        return optionalUser.filter(user -> passwordEncoder.matches(password, user.getPassword()))
+//                .orElse(null);
+//    }
+
 
     public Optional<User> findById(Long id) {
         String correlationId = MDC.get("X-Correlation-ID");

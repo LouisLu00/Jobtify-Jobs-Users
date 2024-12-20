@@ -66,11 +66,12 @@ public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Excepti
                 config.setAllowedOrigins(List.of("*")); // Adjust allowed origins as needed
                 config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                 config.setAllowedHeaders(List.of("*"));
+                // config.setAllowCredentials(true);
                 return config;
-            }))
-            .oauth2Login(oauth2 -> oauth2
-                    .defaultSuccessUrl("/api/users/google-login", true)
-                    .failureUrl("/login?error=true"));
+            }));
+//            .oauth2Login(oauth2 -> oauth2
+//                    .defaultSuccessUrl("/api/users/google-login", true)
+//                    .failureUrl("/login?error=true"));
 
     return http.build();
 }
